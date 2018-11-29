@@ -62,12 +62,12 @@ data Command
           csCmds    :: [Command],       -- ^ Commands
           cmdSrcPos :: SrcPos
       }
-    -- | Conditional command
+    -- | Conditional command T2.2
     | CmdIf {
-          ciCond    :: Expression,      -- ^ Condition
-          ciThen    :: Command,         -- ^ Then-branch
-          ciElse    :: Command,         -- ^ Else-branch
-          cmdSrcPos :: SrcPos
+          ciCondThens :: [(Expression,
+                           Command)],   -- ^ Conditional branches
+          ciMbElse    :: Maybe Command, -- ^ Optional else-branch
+          cmdSrcPos   :: SrcPos
       }
     -- | While-loop
     | CmdWhile {
@@ -79,6 +79,12 @@ data Command
     | CmdLet {
           clDecls   :: [Declaration],   -- ^ Declarations
           clBody    :: Command,         -- ^ Let-body
+          cmdSrcPos :: SrcPos
+      }
+    -- | Repeat-loop T2.2
+    | CmdRepeat {
+          crBody    :: Command,         -- ^ Loop-body
+          crCond    :: Expression,      -- ^ Loop-condition
           cmdSrcPos :: SrcPos
       }
 
@@ -156,6 +162,14 @@ data Expression
     | ExpPrj {
           epRcd     :: Expression,      -- ^ Record expression
           epFld     :: Name,            -- ^ Field to project out
+          expType   :: Type,
+          expSrcPos :: SrcPos
+      }
+    -- | Conditional expression T2.2
+    | ExpCond {
+          ecCond    :: Expression,      -- ^ Condition
+          ecTrue    :: Expression,      -- ^ Value if condition true
+          ecFalse   :: Expression,      -- ^ Value if condition false
           expType   :: Type,
           expSrcPos :: SrcPos
       }

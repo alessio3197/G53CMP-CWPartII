@@ -11,7 +11,7 @@
 ******************************************************************************
 -}
 
--- | MiniTriangle Type Checker. 
+-- | MiniTriangle Type Checker.
 
 -- Substantially re-written autumn 2013
 
@@ -23,7 +23,7 @@ module TypeChecker (
 
 -- Standard library imports
 import Data.List ((\\), nub, sort, intersperse)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust,isJust)
 import Control.Monad (zipWithM, unless)
 import Control.Monad.Fix (mfix)
 
@@ -41,7 +41,7 @@ import MTIR
 import PPMTIR
 import Parser (parse)
 
--- | Type checks a complete MiniTriangle program in the standard environment 
+-- | Type checks a complete MiniTriangle program in the standard environment
 -- and reports any errors. Hence a computation in the diagnostics monad 'D'.
 -- Additionally, translates the program into the type-annotated, intermediate
 -- representation MTIR, including eliminating implicit dereferencing at the
@@ -62,7 +62,7 @@ import Parser (parse)
 typeCheck :: A.AST -> D MTIR
 typeCheck (A.AST {A.astCmd = c}) = do
     c' <- chkCmd mtStdEnv c
-    return (MTIR {mtirCmd = c'}) 
+    return (MTIR {mtirCmd = c'})
 
 
 ------------------------------------------------------------------------------
@@ -93,18 +93,22 @@ chkCmd env (A.CmdCall {A.ccProc = p, A.ccArgs = es, A.cmdSrcPos = sp}) = do
 chkCmd env (A.CmdSeq {A.csCmds = cs, A.cmdSrcPos = sp}) = do
     cs' <- mapM (chkCmd env) cs                         -- env |- cs
     return (CmdSeq {csCmds = cs', cmdSrcPos = sp})
--- T-IF
+-- T-IF T2.2
 chkCmd env (A.CmdIf {A.ciCondThens = ecs, A.ciMbElse = mc2,
                      A.cmdSrcPos=sp}) = do
--- YOUR CODE HERE: This has just been patched to work for the original
--- if-then-else. The entire list ecs needs to be processed properly,
--- and the fact that the else-branch is optional taken care of.
-    let (e, c1) = head ecs      -- Not wrong, but unnecessary
-    let c2      = fromJust mc2  -- Wrong: the else-branch might not be there.
-    e'  <- chkTpExp env e Boolean                       -- env |- e : Boolean
-    c1' <- chkCmd env c1                                -- env |- c1
-    c2' <- chkCmd env c2                                -- env |- c2
-    return (CmdIf {ciCond = e', ciThen = c1', ciElse = c2', cmdSrcPos = sp})
+    let (es, c1s) = unzip ecs
+    let es'  = (mapM (chkTpExp env) es (Boolean))
+    let c1s' = (mapM (chkCmd env) c1s)
+    let ecs' = zip (es' c1s')
+    --let mc2' = if isJust mc2 then (chkCmd env mc2) else Nothing
+    case mc2 of
+         Just mc2 -> do
+             mc2' <- chkCmd env mc2
+             return (CmdIf {ciCondThens = ecs', ciMbElse = mc2', cmdSrcPos = sp})
+         Nothing -> do
+             mc2' <- mc2
+             return (CmdIf {ciCondThens = ecs', ciMbElse = mc2', cmdSrcPos = sp})
+
 -- T-WHILE
 chkCmd env (A.CmdWhile {A.cwCond = e, A.cwBody = c, A.cmdSrcPos = sp}) = do
     e' <- chkTpExp env e Boolean                        -- env |- e : Boolean
@@ -113,9 +117,14 @@ chkCmd env (A.CmdWhile {A.cwCond = e, A.cwBody = c, A.cmdSrcPos = sp}) = do
 -- T-LET
 chkCmd env (A.CmdLet {A.clDecls = ds, A.clBody = c, A.cmdSrcPos = sp}) = do
     (ds', env') <- mfix $ \ ~(_, env') ->               -- env;env'|- ds | env'
-                       chkDeclarations (openMinScope env) env' ds 
+                       chkDeclarations (openMinScope env) env' ds
     c'          <- chkCmd env' c                        -- env' |- c
     return (CmdLet {clDecls = ds', clBody = c', cmdSrcPos = sp})
+-- T-REPEAT T2.2
+chkCmd env (A.CmdRepeat {A.crBody = cb, A.crCond = cc, A.cmdSrcPos = sp}) = do
+    cb' <- chkCmd env cb
+    cc' <- chkTpExp env cc Boolean
+    return (CmdRepeat {crBody = cb', crCond = cc', cmdSrcPos = sp})
 
 
 -- Check that declarations/definitions are well-typed in given environment
@@ -133,7 +142,7 @@ chkDeclarations :: Env -> Env -> [A.Declaration] -> D ([Declaration], Env)
 -- T-DECLEMPTY
 chkDeclarations env envB [] = return ([], env)
 -- T-DECLCONST
-chkDeclarations env envB 
+chkDeclarations env envB
                 (A.DeclConst {A.dcConst = x, A.dcVal = e, A.dcType = t,
                               A.declSrcPos=sp}
                  : ds) = do
@@ -143,14 +152,14 @@ chkDeclarations env envB
         Left old -> do
             emitErrD sp (redeclaredMsg old)
             chkDeclarations env envB ds
-        Right (env', x') -> do                      
+        Right (env', x') -> do
             wellinit (itmsLvl x') e'
             (ds', env'') <- chkDeclarations env'    -- env'; envB |- ds | env''
                                             envB
                                             ds
             return (DeclConst {dcConst = x', dcVal = e'} : ds', env'')
 -- T-DECLVAR
-chkDeclarations env envB 
+chkDeclarations env envB
                 (A.DeclVar {A.dvVar = x, A.dvType = t, A.dvMbVal = Nothing,
                             A.declSrcPos=sp}
                  : ds) = do
@@ -159,7 +168,7 @@ chkDeclarations env envB
         Left old -> do
             emitErrD sp (redeclaredMsg old)
             chkDeclarations env envB ds
-        Right (env', x') -> do                      
+        Right (env', x') -> do
             (ds', env'') <- chkDeclarations env'    -- env'; envB |- ds | env''
                                             envB
                                             ds
@@ -193,7 +202,7 @@ chkDeclarations env envB
         Left old -> do
             emitErrD sp (redeclaredMsg old)
             chkDeclarations env envB ds
-        Right (env', f') -> do                      
+        Right (env', f') -> do
             (ds', env'') <- chkDeclarations env'    -- env'; envB |- ds | env''
                                             envB
                                             ds
@@ -211,7 +220,7 @@ chkDeclarations env envB
         Left old -> do
             emitErrD sp (redeclaredMsg old)
             chkDeclarations env envB ds
-        Right (env', p') -> do                      
+        Right (env', p') -> do
             (ds', env'') <- chkDeclarations env'    -- env'; envB |- ds | env''
                                             envB
                                             ds
@@ -228,7 +237,7 @@ chkArgDecls :: Env -> [A.ArgDecl] -> D ([IntTermSym], Env)
 -- T-DECLARGEMPTY
 chkArgDecls env [] = return ([], env)
 -- T-DECLARG, T-DECLINARG, T-DECLOUTARG, T-DECLVARARG
-chkArgDecls env  
+chkArgDecls env
             (A.ArgDecl {A.adArg = x, A.adArgMode = am, A.adType = td,
              A.adSrcPos=sp}
             : as) = do
@@ -237,7 +246,7 @@ chkArgDecls env
         Left old -> do
             emitErrD sp (redeclaredMsg old)
             chkArgDecls env as
-        Right (env', x') -> do                          
+        Right (env', x') -> do
             (as', env'') <- chkArgDecls env' as         -- env' |- as | env''
             return (x' : as', env'')
 
@@ -332,6 +341,11 @@ infTpExp env e@(A.ExpLitInt {A.eliVal = n, A.expSrcPos = sp}) = do
     n' <- toMTInt n sp
     return (Integer,                            -- env |- n : Integer
             ExpLitInt {eliVal = n', expType = Integer, expSrcPos = sp})
+-- T-LITCHAR T2.2
+infTpExp env e@(A.ExpLitChr {A.elcVal = c, A.expSrcPos = sp}) = do
+    c' <- toMTChr c sp
+    return (Char,
+            ExpLitChr {elcVal = c', expType = Char, expSrcPos = sp})
 -- T-VAR
 infTpExp env (A.ExpVar {A.evVar = x, A.expSrcPos = sp}) = do
     tms <- lookupName env x sp          -- env(x) = t, sources(t,t)
@@ -391,7 +405,7 @@ infTpExp env (A.ExpRcd {A.erFldDefs = fds, A.expSrcPos = sp}) = do
         allDistinct xs = xs == nub xs
         repeatedMsg xs = "Repeated record field name(s): \""
                          ++ concat (intersperse "\", \"" (nub (xs \\ nub xs)))
-                         ++ "\"" 
+                         ++ "\""
 -- T-PRJ
 infTpExp env (A.ExpPrj {A.epRcd = e, A.epFld = f, A.expSrcPos = sp}) = do
     (rrt, e') <- infRefRcdTpExp env e           -- env |- e : R({xs:ts})
@@ -400,8 +414,14 @@ infTpExp env (A.ExpPrj {A.epRcd = e, A.epFld = f, A.expSrcPos = sp}) = do
     return (rt, ExpPrj {epRcd = e', epFld = f, expType = rt, expSrcPos = sp})
     where
         notAFieldMsg f rt = "The type \"" ++ show rt
-                            ++ "\" does not contain any field \"" ++ f ++ "\"" 
-
+                            ++ "\" does not contain any field \"" ++ f ++ "\""
+-- T-COND T2.2
+infTpExp env (A.ExpCond {A.ecCond = c, A.ecTrue = tr, A.ecFalse = f, A.expSrcPos = sp}) = do
+    c'  <- chkTpExp env c Boolean
+    (t, tr') <- infNonRefTpExp env tr
+    f'  <- chkTpExp env f t
+    return (t,
+            ExpCond {ecCond = c', ecTrue = tr', ecFalse = f', expType = t, expSrcPos = sp})
 
 -- Check that expression is well-typed in the given environment and
 -- infer its type assuming it should be an non-reference type:
@@ -414,7 +434,7 @@ infTpExp env (A.ExpPrj {A.epRcd = e, A.epFld = f, A.expSrcPos = sp}) = do
 infNonRefTpExp :: Env -> A.Expression -> D (Type, Expression)
 infNonRefTpExp env e = do
     (t, e') <- infTpExp env e
-    sources_pred (not . refType) "non-reference type" t e' 
+    sources_pred (not . refType) "non-reference type" t e'
 
 
 -- Check that expression is well-typed in the given environment and
@@ -454,7 +474,7 @@ infArrTpExp env e n = do
 infRefAryTpExp :: Env -> A.Expression -> D (Type, Expression)
 infRefAryTpExp env e = do
     (t, e') <- infTpExp env e
-    sources_pred refAry "reference to array" t e' 
+    sources_pred refAry "reference to array" t e'
     where
         refAry (Src (Ary _ _)) = True
         refAry (Snk (Ary _ _)) = True
@@ -473,7 +493,7 @@ infRefAryTpExp env e = do
 infRefRcdTpExp :: Env -> A.Expression -> D (Type, Expression)
 infRefRcdTpExp env e = do
     (t, e') <- infTpExp env e
-    sources_pred refRcd "reference to record" t e' 
+    sources_pred refRcd "reference to record" t e'
     where
         refRcd (Src (Rcd _)) = True
         refRcd (Snk (Rcd _)) = True
@@ -544,7 +564,7 @@ sources s       t       e          = do
 
 
 {-
--- Alternative definition without explicit use of subtyping for reference. 
+-- Alternative definition without explicit use of subtyping for reference.
 -- Somewhat less flexible and a bit more verbose, but adequate for
 -- MiniTriangle as it stands, and avoiding subtyping is a simplification.
 sources :: Type -> Type -> Expression -> D Expression
@@ -576,7 +596,7 @@ sources_pred p et t       e | p t = return (t, e)
 sources_pred p et (Ref t) e       = sources_pred p et t (deref e)
 sources_pred p et (Src t) e       = sources_pred p et t (deref e)
 sources_pred p et t       e       = do
-    emitErrD (srcPos e) 
+    emitErrD (srcPos e)
              ("Expected " ++ et ++ ", got \"" ++ show t ++ "\"")
     return (SomeType, e)
 
@@ -597,7 +617,7 @@ sinks_nonreftype (Snk t) e
         emitErrD (srcPos e)
                  "Cannot assign value of non-reference type to this variable"
         return (SomeType, e)
-sinks_nonreftype (Src t) e = 
+sinks_nonreftype (Src t) e =
     sinks_nonreftype t (deref e)
 sinks_nonreftype (Ref t) e
     | not (refType t) = return (t, e)
@@ -664,7 +684,7 @@ wellinit l (ExpApp {eaFun = f, eaArgs = es}) = do
             | l' == l ->
                 emitErrD sp
                          ("Function \""
-                          ++ n 
+                          ++ n
                           ++ "\" may not be called from initializers in the \
                              \same block as in which it is defined.")
             | otherwise -> return ()

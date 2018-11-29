@@ -64,10 +64,11 @@ import Name
 -- representation, except that SomeType is treated as equal to any type
 -- strictly as an implementation mechanism to avoid follow-on errors from
 -- a detected type error.
-data Type = SomeType            -- ^ Some unknown type 
+data Type = SomeType            -- ^ Some unknown type
           | Void                -- ^ The empty type (return type of procedures)
           | Boolean             -- ^ The Boolean type
           | Integer             -- ^ The Integer type
+          | Char                -- ^ The Character Type T2.2
           | Src Type            -- ^ Read-only variable reference (source)
           | Snk Type            -- ^ Write-only variable reference (sink)
           | Ref Type            -- ^ Variable reference
@@ -84,7 +85,7 @@ data Type = SomeType            -- ^ Some unknown type
 -- a canonical record field order. This function is to be used for sorting
 -- any (potentially) unsorted list of record fields.
 sortRcdFlds :: [(Name, a)] -> [(Name, a)]
-sortRcdFlds = sortBy (\na1 na2 -> compare (fst na1) (fst na2)) 
+sortRcdFlds = sortBy (\na1 na2 -> compare (fst na1) (fst na2))
 
 
 instance Eq Type where
@@ -93,13 +94,14 @@ instance Eq Type where
     Void       == Void       = True
     Boolean    == Boolean    = True
     Integer    == Integer    = True
+    Char       == Char       = True --T2.2
     Src t1     == Src t2     = t1 == t2
     Snk t1     == Snk t2     = t1 == t2
     Ref t1     == Ref t2     = t1 == t2
     Ary t1 s1  == Ary t2 s2  = t1 == t2 && s1 == s2
     Rcd fts1   == Rcd fts2   = fts1 == fts2
     Arr ts1 t1 == Arr ts2 t2 = ts1 == ts2 && t1 == t2
-    _          == _          = False 
+    _          == _          = False
 
 
 -- | MiniTriangle Subtyping relation.
@@ -109,7 +111,7 @@ instance Eq Type where
 (Ref t1)   <: (Ref t2)   = t1 <: t2 && t2 <: t1
 (Ref t1)   <: (Src t2)   = t1 <: t2
 (Ref t1)   <: (Snk t2)   = t2 <: t1
-Arr ts1 t1 <: Arr ts2 t2 = and [ t2 <: t1 | (t1, t2) <- zip ts1 ts2 ] 
+Arr ts1 t1 <: Arr ts2 t2 = and [ t2 <: t1 | (t1, t2) <- zip ts1 ts2 ]
                            && t1 <: t2
 t1         <: t2         = t1 == t2
 
@@ -161,7 +163,7 @@ fldType _ _ = SomeType
 
 -- Is the type a record type that contain the named field?
 fldExists :: Name -> Type -> Bool
-fldExists _ SomeType  = True    -- As SomeType compatible with any type  
+fldExists _ SomeType  = True    -- As SomeType compatible with any type
 fldExists f (Rcd fts) =
     case lookup f fts of
         Just _  -> True
@@ -213,8 +215,8 @@ showsFieldTypes :: [(Name, Type)] -> ShowS
 showsFieldTypes []         = id
 showsFieldTypes (ft : fts) = sftAuxFT ft fts
     where
-        sftAuxFT (f, t) fts = showString f 
-                              . showString " : " 
+        sftAuxFT (f, t) fts = showString f
+                              . showString " : "
                               . shows t
                               . sftAux fts
 
@@ -251,6 +253,6 @@ type MTChr = Char
 -- used.
 
 isMTChr :: Char -> Bool
-isMTChr = assert (0 >= lbMTInt && 255 <= ubMTInt) 
+isMTChr = assert (0 >= lbMTInt && 255 <= ubMTInt)
                  "Type" "isMTChar" "MTChar is too big for MTInt."
                  isLatin1

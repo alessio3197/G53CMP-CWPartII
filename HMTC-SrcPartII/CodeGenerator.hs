@@ -23,9 +23,9 @@ import Control.Monad (when)
 import Data.Char (isDigit)
 import Data.Array
 import Data.Set (Set)
-import qualified Data.Set as S 
+import qualified Data.Set as S
 import Data.Map (Map)
-import qualified Data.Map as M 
+import qualified Data.Map as M
 
 -- HMTC module imports
 import SrcPos
@@ -142,14 +142,14 @@ run (MTIR { mtirCmd = c}) = do
 execute :: MSL -> CGEnv -> MTInt -> Command -> TAMCG ()
 execute majl env n (CmdAssign {caVar = v, caVal = e}) = do
     evaluate majl env e         -- Have to evaluate e & v even if size of e is
-    evaluate majl env v         -- 0 as there could be side effects. 
+    evaluate majl env v         -- 0 as there could be side effects.
     emit (STOREIB (sizeOf (expType e)))
 execute majl env n (CmdCall {ccProc = p, ccArgs = as}) = do
     mapM_ (evaluate majl env) as
     evaluate majl env p
     emit CALLI
 execute majl env n (CmdSeq {csCmds = cs}) = executeSeq majl env n cs
-execute majl env n (CmdIf {ciCond = e, ciThen = c1, ciElse = c2}) = do
+{-execute majl env n (CmdIf {ciCond = e, ciThen = c1, ciElse = c2}) = do
     lblElse <- newName
     lblOver <- newName
     evaluate majl env e
@@ -158,7 +158,7 @@ execute majl env n (CmdIf {ciCond = e, ciThen = c1, ciElse = c2}) = do
     emit (JUMP lblOver)
     emit (Label lblElse)
     execute majl env n c2
-    emit (Label lblOver)
+    emit (Label lblOver)-}
 execute majl env n (CmdWhile {cwCond = e, cwBody = c}) = do
     lblLoop <- newName
     lblCond <- newName
@@ -210,7 +210,7 @@ executeSeq majl env n (c:cs) = do
 --
 -- (4) The declarations
 --
--- Returns: 
+-- Returns:
 --
 -- (1) New environment
 --
@@ -232,7 +232,7 @@ elaborateDecls majl env n ds = do
 --
 -- (3) The declarations
 --
--- Returns: 
+-- Returns:
 --
 -- (1) New environment
 --
@@ -270,7 +270,7 @@ elaborateDecl majl env (DeclVar {dvVar = x, dvMbVal = Nothing}) =
     emit (LOADLB 0 (sizeOf (rfcdType (itmsType x))))
 elaborateDecl majl env (DeclVar {dvMbVal = Just e}) =
     evaluate majl env e
-elaborateDecl majl env (DeclFun {dfFun = f, dfArgs = as, dfBody = e}) = 
+elaborateDecl majl env (DeclFun {dfFun = f, dfArgs = as, dfBody = e}) =
     divert $ do
         let fn = lookupLbl f env
         emit (Label fn)
@@ -295,7 +295,7 @@ elaborateDecl majl env (DeclProc {dpProc = p, dpArgs = as, dpBody = c}) =
 --
 -- (2) The argument declarations
 --
--- Returns: 
+-- Returns:
 --
 -- (1) New environment
 --
@@ -305,7 +305,7 @@ extendEnvArgs :: CGEnv -> [IntTermSym] -> (CGEnv, MTInt)
 extendEnvArgs env as = (eeaAux env (-n) as, n)
     where
         n = sum [ argSize a | a <- as ]
-        
+
         eeaAux env _ []     = env
         eeaAux env d (a:as) = eeaAux ((a, ISVDisp d) : env) (d + argSize a) as
 
@@ -465,7 +465,7 @@ rad = 2
 
 -- Size of link and return address area
 lrs :: MTInt
-lrs = 3 
+lrs = 3
 
 ------------------------------------------------------------------------------
 -- TAM data representation
@@ -483,7 +483,7 @@ sizeOf SomeType  = cgErr "sizeOf" sizeOfErrMsgSomeType
 sizeOf Void      = 0
 sizeOf Boolean   = 1
 sizeOf Integer   = 1
--- sizeOf Character = 1
+sizeOf Char      = 1 --T2.4
 sizeOf (Src _)   = 1
 sizeOf (Snk _)   = 1
 sizeOf (Ref _)   = 1
@@ -506,7 +506,7 @@ fldOffset f (Rcd fts) = foAux 0 fts
                                    | otherwise = foAux (offs + sizeOf t) fts
 fldOffset f t =
     cgErr "fldOffset"
-          ("Attempt to compute offset of field \"" 
+          ("Attempt to compute offset of field \""
            ++ f ++ "\" for non-record type \"" ++ show t ++ "\"." )
 
 
@@ -568,7 +568,7 @@ tamRepMTChr c = fromIntegral (fromEnum c)
 -- like:
 --
 --     if false then if false then putint(1) else putint(2) else putint(3)
--- 
+--
 -- (any number of "if false") fully. (After first phase, there will
 -- be residual dead branches because there initially were jumps targetting
 -- those labels). Alternatively, one could iterate until a fixed-point is
@@ -590,9 +590,9 @@ peepholeOpt' tis = poAux [] tis'
         tis' = elimUCCJ tis
 
         -- lam: label alias map; tls: targeted labels
-        (lam, tls) = atAux [] [] tis' 
+        (lam, tls) = atAux [] [] tis'
 
-        -- Final taret label for a jump to given label 
+        -- Final taret label for a jump to given label
         target l = M.findWithDefault l l lam
 
         -- ptis: Preceding TAM instructions in reverse order
@@ -652,7 +652,7 @@ peepholeOpt' tis = poAux [] tis'
         poAux ptis (JUMP l : tis) =
             case findLbl tis of
                 tis1@(Label l1 : _) | l1 == l' -> poBack wlo ptis tis1
-                tis1                           -> poAux (JUMP l' : ptis) tis1 
+                tis1                           -> poAux (JUMP l' : ptis) tis1
             where
                 l' = target l
         poAux ptis (LOADCA l : tis) =
@@ -687,8 +687,8 @@ peepholeOpt' tis = poAux [] tis'
         poBack _ [] tis = poAux [] tis
         poBack n tiptis@(ti : ptis) tis
             | n > 0     = poBack (n - 1) ptis (ti : tis)
-            | otherwise = poAux tiptis tis 
-                
+            | otherwise = poAux tiptis tis
+
         findLbl [] = []
         findLbl litis@(Label l : tis)
             | l `S.notMember` tls = findLbl tis
@@ -725,7 +725,7 @@ peepholeOpt' tis = poAux [] tis'
         eliminable _          = Nothing
 
         -- Equivalent TAM sequences for "known" library functions for simple
-        -- form of inlining. 
+        -- form of inlining.
         knownSeq :: Name -> Maybe [TAMInst]
         knownSeq "add" = Just [ADD]
         knownSeq "sub" = Just [SUB]
@@ -742,7 +742,7 @@ peepholeOpt' tis = poAux [] tis'
         knownSeq "or"  = Just [OR]
         knownSeq "not" = Just [NOT]
         knownSeq _     = Nothing
-        
+
         -- Eliminate conditional jumps that manifestly are not conditional
         elimUCCJ :: [TAMInst] -> [TAMInst]
         elimUCCJ [] = []
@@ -785,9 +785,9 @@ peepholeOpt' tis = poAux [] tis'
         extend (a, b) m = m'
             where
                 (b'', m') = extAux b'' [] a b m
-        
+
                 extAux b'' m' a b [] = (b, (a, b'') : m')
-                extAux b'' m' a b ((a1, b1) : m) = 
+                extAux b'' m' a b ((a1, b1) : m) =
                     case (b == a1, b1 == a) of
                         (False, False) -> extAux b'' ((a1, b1) : m') a b m
                         (False, True)  -> extAux b'' ((a1, b'') : m') a b m
