@@ -149,16 +149,24 @@ execute majl env n (CmdCall {ccProc = p, ccArgs = as}) = do
     evaluate majl env p
     emit CALLI
 execute majl env n (CmdSeq {csCmds = cs}) = executeSeq majl env n cs
-{-execute majl env n (CmdIf {ciCond = e, ciThen = c1, ciElse = c2}) = do
-    lblElse <- newName
-    lblOver <- newName
-    evaluate majl env e
-    emit (JUMPIFZ lblElse)
-    execute majl env n c1
-    emit (JUMP lblOver)
-    emit (Label lblElse)
-    execute majl env n c2
-    emit (Label lblOver)-}
+--T2.4
+execute majl env n (CmdIf {ciCondThens = ecs, ciMbElse = mc2}) = do
+    lblSkipElse <- newName
+    mapM_ (processIfThens) ecs
+    processMaybeExecute mc2
+    where
+        --T2.4
+        processIfThens :: (Expression, Command) -> CG TAMInst () ()
+        processIfThens (e,c) = do
+            lblSkipThen <- newName
+            evaluate majl env e
+            emit (JUMPIFZ lblSkipThen)
+            execute majl env n c
+            emit (Label lblSkipThen)
+        --T2.4
+        processMaybeExecute :: Maybe (Command) -> TAMCG ()
+        processMaybeExecute Nothing = return ()
+        processMaybeExecute (Just mc2) = execute majl env n mc2
 execute majl env n (CmdWhile {cwCond = e, cwBody = c}) = do
     lblLoop <- newName
     lblCond <- newName
@@ -172,7 +180,13 @@ execute majl env n (CmdLet {clDecls = ds, clBody = c}) = do
     (env', n') <- elaborateDecls majl env n ds
     execute majl env' n' c
     emit (POP 0 (n' - n))
-
+--T2.4
+execute majl env n (CmdRepeat {crBody = cb, crCond = cc}) = do
+    lblRepeat <- newName
+    emit(Label lblRepeat)
+    execute majl env n cb
+    evaluate majl env cc
+    emit (JUMPIFZ lblRepeat)
 
 -- Generate code to execute a sequence of commands.
 -- Invariant: Stack depth unchanged.
@@ -192,6 +206,18 @@ executeSeq majl env n (c:cs) = do
     execute majl env n c
     executeSeq majl env n cs
 
+{-}--T2.4
+processIfThens :: (Expression, Command)
+processIfThens (e,c) = do
+    lblSkipThen <- newName
+    evaluate majl env e
+    emit (JUMPIFZ lblSkipThen)
+    execute majl env n c
+    emit (Label lblSkipThen)
+--T2.4
+processMaybeElse :: Maybe Command -> MTInt
+processMaybeElse Nothing    = tamRepBool False
+processMaybeElse (Just mc2) = tamRepBool True-}
 
 ------------------------------------------------------------------------------
 -- Code generation for declarations
@@ -382,6 +408,19 @@ evaluate majl env (ExpPrj {epRcd = r, epFld = f, expType = t}) = do
     evaluate majl env r
     emit (LOADL (fldOffset f tr))
     emit ADD
+--T2.4
+evaluate majl env (ExpCond {ecCond = c, ecTrue = tr, ecFalse = f, expType = t}) = do
+    falseArg <- newName
+    skipFalse <- newName
+    evaluate majl env c
+    --emit (LOADL 1)
+    --emit (EQL)
+    emit (JUMPIFZ falseArg)
+    evaluate majl env tr
+    emit (JUMP skipFalse)
+    emit (Label falseArg)
+    evaluate majl env f
+    emit (Label skipFalse)
 
 
 ------------------------------------------------------------------------------

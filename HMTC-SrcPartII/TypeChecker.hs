@@ -96,19 +96,20 @@ chkCmd env (A.CmdSeq {A.csCmds = cs, A.cmdSrcPos = sp}) = do
 -- T-IF T2.2
 chkCmd env (A.CmdIf {A.ciCondThens = ecs, A.ciMbElse = mc2,
                      A.cmdSrcPos=sp}) = do
-    let (es, c1s) = unzip ecs
-    let es'  = (mapM (chkTpExp env) es (Boolean))
-    let c1s' = (mapM (chkCmd env) c1s)
-    let ecs' = zip (es' c1s')
-    --let mc2' = if isJust mc2 then (chkCmd env mc2) else Nothing
-    case mc2 of
-         Just mc2 -> do
-             mc2' <- chkCmd env mc2
-             return (CmdIf {ciCondThens = ecs', ciMbElse = mc2', cmdSrcPos = sp})
-         Nothing -> do
-             mc2' <- mc2
-             return (CmdIf {ciCondThens = ecs', ciMbElse = mc2', cmdSrcPos = sp})
-
+    ecs' <- mapM chkIfThens ecs
+    mc2' <- chkMaybeElse mc2
+    return (CmdIf {ciCondThens = ecs', ciMbElse = mc2', cmdSrcPos = sp})
+    where
+        chkIfThens :: (A.Expression,A.Command) -> D (Expression, Command)
+        chkIfThens (e,c) = do
+            e' <- chkTpExp env e Boolean
+            c' <- chkCmd env c
+            return (e',c')
+        chkMaybeElse :: Maybe A.Command -> D (Maybe Command)
+        chkMaybeElse Nothing = return Nothing
+        chkMaybeElse (Just mc2) = do
+            mc2' <- chkCmd env mc2
+            return (Just mc2')
 -- T-WHILE
 chkCmd env (A.CmdWhile {A.cwCond = e, A.cwBody = c, A.cmdSrcPos = sp}) = do
     e' <- chkTpExp env e Boolean                        -- env |- e : Boolean

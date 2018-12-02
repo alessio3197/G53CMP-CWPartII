@@ -1,7 +1,7 @@
 // Basic tests for the Part I and Part II extensions.
 
 let
-    var c : Character := 'x';
+    var c : Char := 'x';
     var n : Integer;
     fun odd(n : Integer) : Boolean = !((n / 2) * 2 == n)
 in begin

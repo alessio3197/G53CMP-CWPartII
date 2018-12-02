@@ -28,7 +28,7 @@ import TAMCode
 -- declared in the standard environment as well as for internal use by the
 -- TAM \"runtime\" system. Note that the code generator makes assumptions
 -- about the meaning of many of these routines (\"add\" etc.) based on their
--- names for optimization purposes. 
+-- names for optimization purposes.
 
 libMT :: [TAMInst]
 libMT = [
@@ -160,6 +160,19 @@ libMT = [
     Label "putint",
     LOAD (LB (-1)),
     PUTINT,
+    RETURN 0 1,
+
+-- getchr T2.3
+    Label "getchr",
+    GETCHR,
+    LOAD (LB (-1)),
+    STOREI 0,
+    RETURN 0 1,
+
+-- PUTCHR T2.3
+    Label "putchr",
+    LOAD (LB(-1)),
+    PUTCHR,
     RETURN 0 1,
 
 -- skip
